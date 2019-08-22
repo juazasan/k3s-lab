@@ -1,0 +1,38 @@
+# This script to deploy a three node k3s cluster running in containers to the provisioned the box 
+$script = <<-SCRIPT
+# Install k3d
+curl -s https://raw.githubusercontent.com/rancher/k3d/master/install.sh | bash
+
+# Start the cluster
+k3d create --image "docker.io/rancher/k3s:v0.8.0" --publish 80:80 --workers 3 --auto-restart --wait 0
+
+# Install kubectl
+mkdir $HOME/tmp 
+curl -s -L https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl -o $HOME/tmp/kubectl
+chmod +x $HOME/tmp/kubectl
+mv --force $HOME/tmp/kubectl /usr/local/bin
+rm -rf $HOME/tmp/kubectl
+echo "copying kubectl config file generated at..."
+k3d get-kubeconfig
+cp -r /root/.config /home/vagrant
+chown -R vagrant:vagrant /home/vagrant/.config
+echo "export KUBECONFIG=/home/vagrant/.config/k3d/k3s-default/kubeconfig.yaml" >> /home/vagrant/.bashrc 
+
+# Get the IP address that VirtualBox has given this VM
+IPADDR=`ifconfig enp0s8 | grep mask | awk '{print $2}'| cut -f2 -d:`
+echo This VM has IP address $IPADDR
+SCRIPT
+
+Vagrant.configure("2") do |config|
+  # Specify your hostname if you like
+  config.vm.hostname = "k3d"
+  config.vm.box = "ubuntu/bionic64"
+  config.vm.provider "virtualbox" do |v|
+    v.name = "k3d"
+    v.memory = 8192
+    v.cpus = 2
+  end
+  config.vm.network "private_network", type: "dhcp"
+  config.vm.provision "docker"
+  config.vm.provision "shell", inline: $script
+end
