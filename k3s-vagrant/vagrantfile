@@ -1,0 +1,61 @@
+# This script to deploy a three node k3s cluster running in containers to the provisioned the box 
+$server = <<-SCRIPT
+echo "Getting k3s server IP address assigned by VirtualBox"
+IPADDR=`ifconfig enp0s8 | grep mask | awk '{print $2}'| cut -f2 -d:`
+echo "This VM has IP address $IPADDR"
+echo "Installing k3s server..."
+curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--bind-address $IPADDR --node-ip $IPADDR" sh -
+
+# Set up admin creds for the vagrant user
+echo "Copying credentials to /home/vagrant..."
+sudo --user=vagrant mkdir -p /home/vagrant/.kube
+cp -i /etc/rancher/k3s/k3s.yaml /home/vagrant/.kube/config
+chown $(id -u vagrant):$(id -g vagrant) /home/vagrant/.kube/config
+echo "export KUBECONFIG=/home/vagrant/.kube/config" >> /home/vagrant/.bashrc 
+
+echo "Exporting cluster secret..."
+mkdir /vagrant/.tmp
+cp /var/lib/rancher/k3s/server/node-token /vagrant/.tmp
+echo $IPADDR > /vagrant/.tmp/.serverIPaddress
+SCRIPT
+
+$agent = <<-SCRIPT
+echo "Getting k3s agent IP address assigned by VirtualBox"
+IPADDR=`ifconfig enp0s8 | grep mask | awk '{print $2}'| cut -f2 -d:`
+echo "This VM has IP address $IPADDR"
+echo "Adding k3s-server to hosts file..."
+echo "$(cat /vagrant/.tmp/.serverIPaddress)   k3s-server" >> /etc/hosts
+echo "Installing k3s agent..."
+curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--node-ip $IPADDR" K3S_URL=https://k3s-server:6443 K3S_TOKEN=$(cat /vagrant/.tmp/node-token) sh -
+if [ $(hostname) == "k3s-agent-3" ]; then
+  echo "Removing tmp directory"
+  rm -rf /vagrant/.tmp
+fi
+SCRIPT
+
+Vagrant.configure("2") do |config|
+  config.vm.define "k3s-server" do |server|
+    server.vm.hostname = "k3s-server"
+    server.vm.box = "ubuntu/bionic64"
+    server.vm.provider "virtualbox" do |s|
+      s.name = "k3s-server"
+      s.memory = 1024
+      s.cpus = 2
+    end
+    server.vm.network "private_network", type: "dhcp"
+    server.vm.provision "shell", inline: $server
+  end
+  (1..3).each do |i|
+    config.vm.define "k3s-agent-#{i}" do |node|
+      node.vm.hostname = "k3s-agent-#{i}"
+      node.vm.box = "ubuntu/bionic64"
+      node.vm.provider "virtualbox" do |v|
+        v.name = "k3s-agent-#{i}"
+        v.memory = 2048
+        v.cpus = 2
+      end
+      node.vm.network "private_network", type: "dhcp"
+      node.vm.provision "shell", inline: $agent
+    end
+  end
+end
