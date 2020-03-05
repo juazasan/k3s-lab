@@ -42,7 +42,7 @@ Vagrant.configure("2") do |config|
       s.memory = 1024
       s.cpus = 2
     end
-    server.vm.network "private_network", type: "dhcp"
+    server.vm.network "public_network", bridge: "enp0s25", use_dhcp_assigned_default_route: true
     server.vm.provision "shell", inline: $server
   end
   (1..3).each do |i|
@@ -51,10 +51,10 @@ Vagrant.configure("2") do |config|
       node.vm.box = "ubuntu/bionic64"
       node.vm.provider "virtualbox" do |v|
         v.name = "k3s-agent-#{i}"
-        v.memory = 2048
+        v.memory = 4096
         v.cpus = 2
       end
-      node.vm.network "private_network", type: "dhcp"
+      node.vm.network "public_network", bridge: "enp0s25", use_dhcp_assigned_default_route: true
       node.vm.provision "shell", inline: $agent
     end
   end
