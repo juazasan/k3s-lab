@@ -13,6 +13,11 @@ cp -i /etc/rancher/k3s/k3s.yaml /home/vagrant/.kube/config
 chown $(id -u vagrant):$(id -g vagrant) /home/vagrant/.kube/config
 echo "export KUBECONFIG=/home/vagrant/.kube/config" >> /home/vagrant/.bashrc 
 
+
+# Preventing pods to be scheduled in the master node
+echo "Preventing pods to be scheduled in the master node..."
+kubectl taint node k3s-server isMaster=true:NoSchedule
+
 echo "Exporting cluster secret..."
 mkdir /vagrant/.tmp
 cp /var/lib/rancher/k3s/server/node-token /vagrant/.tmp
