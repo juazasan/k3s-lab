@@ -4,7 +4,7 @@ echo "Getting k3s server IP address assigned by VirtualBox"
 IPADDR=`ifconfig enp0s8 | grep mask | awk '{print $2}'| cut -f2 -d:`
 echo "This VM has IP address $IPADDR"
 echo "Installing k3s server..."
-curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--bind-address $IPADDR --node-ip $IPADDR" sh -
+curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--bind-address $IPADDR --node-ip $IPADDR --disable-network-policy --node-taint isMaster=true:NoSchedule --flannel-iface enp0s8" sh -
 
 # Set up admin creds for the vagrant user
 echo "Copying credentials to /home/vagrant..."
@@ -31,7 +31,7 @@ echo "This VM has IP address $IPADDR"
 echo "Adding k3s-server to hosts file..."
 echo "$(cat /vagrant/.tmp/.serverIPaddress)   k3s-server" >> /etc/hosts
 echo "Installing k3s agent..."
-curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--node-ip $IPADDR" K3S_URL=https://k3s-server:6443 K3S_TOKEN=$(cat /vagrant/.tmp/node-token) sh -
+curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--node-ip $IPADDR --flannel-iface enp0s8" K3S_URL=https://k3s-server:6443 K3S_TOKEN=$(cat /vagrant/.tmp/node-token) sh -
 if [ $(hostname) == "k3s-agent-3" ]; then
   echo "Removing tmp directory"
   rm -rf /vagrant/.tmp
