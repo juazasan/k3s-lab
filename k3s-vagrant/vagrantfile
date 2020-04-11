@@ -5,16 +5,17 @@ IPADDR=`ifconfig enp0s8 | grep mask | awk '{print $2}'| cut -f2 -d:`
 echo "This VM has IP address $IPADDR"
 
 echo "Installing dependencies (iscsi, git, helm)..."
-apt get update
-apt-get install open-iscsi git -y
+apt-get update -q
+apt-get install open-iscsi git -y -q
+mkdir $HOME/tmp
 helm_version="3.1.2"
-curl -L https://get.helm.sh/helm-v$helm_version-linux-amd64.tar.gz -o $HOME/tmp/helm.tar.gz
+curl -s -L https://get.helm.sh/helm-v$helm_version-linux-amd64.tar.gz -o $HOME/tmp/helm.tar.gz
 tar zxvf $HOME/tmp/helm.tar.gz -C $HOME/tmp
 mv $HOME/tmp/linux-amd64/helm /usr/local/bin
 chmod +x /usr/local/bin/helm
 
 echo "Installing k3s server..."
-curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--bind-address $IPADDR --node-ip $IPADDR --disable-network-policy --node-taint isMaster=true:NoSchedule --flannel-iface enp0s8" sh -
+curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--bind-address $IPADDR --node-ip $IPADDR --disable-network-policy --node-taint isMaster=true:NoSchedule --flannel-iface enp0s8 --disable local-storage" sh -
 
 # Set up admin creds for the vagrant user
 echo "Copying credentials to /home/vagrant..."
@@ -23,9 +24,13 @@ cp -i /etc/rancher/k3s/k3s.yaml /home/vagrant/.kube/config
 chown $(id -u vagrant):$(id -g vagrant) /home/vagrant/.kube/config
 echo "export KUBECONFIG=/home/vagrant/.kube/config" >> /home/vagrant/.bashrc 
 
-# Preventing pods to be scheduled in the master node
-echo "Preventing pods to be scheduled in the master node..."
-kubectl taint node k3s-server isMaster=true:NoSchedule
+echo "Installing Longhorn..."
+kubectl create namespace longhorn-system
+git clone https://github.com/longhorn/longhorn.git
+helm install longhorn ./longhorn/chart \
+  --namespace longhorn-system \
+  --set defaultSettings.taintToleration="",defaultSettings.defaultDataPath="/k3sdata",defaultSettings.backup-target="",defaultSettings.storage-over-provisioning-percentage="20" \
+  --kubeconfig /etc/rancher/k3s/k3s.yaml
 
 echo "Exporting cluster secret..."
 mkdir /vagrant/.tmp
@@ -44,17 +49,14 @@ mkdir /k3sdata
 echo "/dev/sdc1 /k3sdata  ext4 defaults  0  0" >> /etc/fstab
 mount -a
 echo "Disk mounted in /k3sdata"
+echo "Installing dependencies (iscsi)..."
+apt-get update -q
+apt-get install open-iscsi -y -q
 echo "Adding k3s-server to hosts file..."
 echo "$(cat /vagrant/.tmp/.serverIPaddress)   k3s-server" >> /etc/hosts
 echo "Installing k3s agent..."
 curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--node-ip $IPADDR --flannel-iface enp0s8" K3S_URL=https://k3s-server:6443 K3S_TOKEN=$(cat /vagrant/.tmp/node-token) sh -
 if [ $(hostname) == "k3s-agent-3" ]; then
-  echo "Installing Longhorn amd removing local-path storage class..."
-  kubectl create namespace longhorn-system
-  git clone https://github.com/longhorn/longhorn.git
-  helm install longhorn ./longhorn/chart --namespace longhorn-system --set defaultSettings.taintToleration="",defaultSettings.defaultDataPath="/k3sdata",defaultSettings.backup-target="",defaultSettings.storage-over-provisioning-percentage="20"
-  kubectl create -f https://raw.githubusercontent.com/longhorn/longhorn/master/examples/storageclass.yaml
-  kubectl delete storageclass local-path
   echo "Removing tmp directory"
   rm -rf /vagrant/.tmp
 fi
@@ -81,10 +83,10 @@ Vagrant.configure("2") do |config|
         v.name = "k3s-agent-#{i}"
         v.memory = 4096
         v.cpus = 2
-        unless File.exist? (disk)		    
-          s.customize ['createhd', '--filename', datadisk, '--size', 50 * 1024]
+        unless File.exist? (datadisk)		    
+          v.customize ['createhd', '--filename', datadisk, '--size', 50 * 1024]
         end
-        s.customize ['storageattach', :id, '--storagectl', 'SCSI', '--port', 2, '--device', 0, '--type',  'hdd', '--medium', disk]
+        v.customize ['storageattach', :id, '--storagectl', 'SCSI', '--port', 2, '--device', 0, '--type',  'hdd', '--medium', datadisk]
       end
       node.vm.network "public_network", bridge: "enp0s25", use_dhcp_assigned_default_route: true
       node.vm.provision "shell", inline: $agent
