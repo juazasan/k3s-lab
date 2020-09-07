@@ -71,7 +71,7 @@ Vagrant.configure("2") do |config|
       s.memory = 1024
       s.cpus = 2
     end
-    server.vm.network "public_network", bridge: "enp0s25", use_dhcp_assigned_default_route: true
+    server.vm.network "public_network", bridge: "wlp3s0", use_dhcp_assigned_default_route: true
     server.vm.provision "shell", inline: $server
   end
   (1..3).each do |i|
@@ -88,7 +88,7 @@ Vagrant.configure("2") do |config|
         end
         v.customize ['storageattach', :id, '--storagectl', 'SCSI', '--port', 2, '--device', 0, '--type',  'hdd', '--medium', datadisk]
       end
-      node.vm.network "public_network", bridge: "enp0s25", use_dhcp_assigned_default_route: true
+      node.vm.network "public_network", bridge: "wlp3s0", use_dhcp_assigned_default_route: true
       node.vm.provision "shell", inline: $agent
     end
   end
