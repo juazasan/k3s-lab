@@ -8,7 +8,7 @@ echo "Installing dependencies (iscsi, git, helm)..."
 apt-get update -q
 apt-get install open-iscsi git -y -q
 mkdir $HOME/tmp
-helm_version="3.1.2"
+helm_version="3.3.4"
 curl -s -L https://get.helm.sh/helm-v$helm_version-linux-amd64.tar.gz -o $HOME/tmp/helm.tar.gz
 tar zxvf $HOME/tmp/helm.tar.gz -C $HOME/tmp
 mv $HOME/tmp/linux-amd64/helm /usr/local/bin
@@ -33,8 +33,8 @@ helm install longhorn ./longhorn/chart \
   --kubeconfig /etc/rancher/k3s/k3s.yaml
 
 echo "Exporting cluster secret..."
-mkdir /vagrant/.tmp
-cp /var/lib/rancher/k3s/server/node-token /vagrant/.tmp
+mkdir -p /vagrant/.tmp
+cp -f /var/lib/rancher/k3s/server/node-token /vagrant/.tmp
 echo $IPADDR > /vagrant/.tmp/.serverIPaddress
 SCRIPT
 
@@ -45,7 +45,7 @@ echo "This VM has IP address $IPADDR"
 echo "Provisioning, Formating and Attaching Data Disk..."
 parted -s /dev/sdc mklabel gpt mkpart primary 1MiB 53.7GB
 mkfs.ext4 /dev/sdc1
-mkdir /k3sdata
+mkdir -p /k3sdata
 echo "/dev/sdc1 /k3sdata  ext4 defaults  0  0" >> /etc/fstab
 mount -a
 echo "Disk mounted in /k3sdata"
